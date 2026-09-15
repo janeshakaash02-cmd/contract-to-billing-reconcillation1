@@ -1,0 +1,29 @@
+GLOBAL FINANCE OPERATIONS: BILLING & TOLERANCE POLICY (FIN-POL-2025)
+
+1. PURPOSE & SCOPE
+This policy sets mandatory reconciliation criteria for accounts payable and customer billing compliance across all corporate contracts.
+
+2. TOLERANCE THRESHOLDS & VARIANCE RULES
+- Standard Tolerance Margin: A line-item or invoice variance of up to 1.0% or $50.00 (whichever is lower) is permissible for automated matching to account for minor rounding differences.
+- Material Variances: Any variance exceeding 1.0% or $50.00 is classified as an exception requiring human finance review.
+- High Exposure Threshold: Any exception with financial exposure exceeding $1,000.00 requires secondary controller sign-off.
+
+3. DISCOUNT GOVERNANCE
+- Contractual discounts stipulated in executed agreements (e.g. promotional discounts, volume tiers) must be applied explicitly on the invoice.
+- If an invoice is billed at full gross value when a discount is contractual, the invoice must be placed on hold and disputed.
+
+4. MULTI-CURRENCY REGULATIONS
+- Invoices must be billed strictly in the currency designated in the executed agreement.
+- Billing in unauthorized alternate currencies constitutes an unmatched exception due to unhedged FX exposure.
+
+5. CONTRACT EXPIRATION CONTROLS
+- Services rendered after the contractual termination date cannot be settled automatically.
+- Accounts payable must verify whether an active addendum, extension, or renewal is executed before payment release.
+
+6. DUPLICATE BILLING PREVENTION
+- Invoices presenting identical customer identity, billing period, and amount will be flagged as DUPLICATE and blocked from settlement.
+
+7. HUMAN-IN-THE-LOOP (HITL) REVIEW PROCESS
+- Automated engines provide recommendations, variance breakdowns, and retrieved contractual evidence.
+- The final financial disposition (ACCEPT, REJECT, OVERRIDE) must be executed by an authorized human reviewer.
+- All reviewer actions must be permanently logged in the audit trail.

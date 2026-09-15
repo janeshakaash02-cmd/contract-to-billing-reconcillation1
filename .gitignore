@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environments
+.env
+venv/
+env/
+ENV/
+
+# Chroma / SQLite data if regenerated on deploy
+# (Keep synthetic data folder structure tracked)
+*.log
