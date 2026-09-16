@@ -29,8 +29,13 @@ except ImportError:
     def compute_similarity(s1: str, s2: str) -> float:
         return SequenceMatcher(None, s1.lower(), s2.lower()).ratio()
 
-import plotly.graph_objects as go
-import plotly.express as px
+# Optional Plotly import with fallback for minimal cloud deployments
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
 
 # ==============================================================================
 # 2. BLACK & NEON GREEN DESIGN SYSTEM (CSS TOKENS)
@@ -663,42 +668,94 @@ if nav_choice == "📊 Executive Dashboard":
         st.markdown(f"""<div class="metric-card metric-card-cyan"><div class="metric-label">Labor Hours Saved</div><div class="metric-value metric-value-cyan">{m['hours']}h</div><div class="metric-sub" style="color:#00F0FF;">${m['cost']:,.0f} Net Savings</div></div>""", unsafe_allow_html=True)
 
     st.markdown("### 🌐 End-to-End Autonomous Pipeline Flow")
-    fig_sankey = go.Figure(go.Sankey(
-        node=dict(
-            pad=16, thickness=16, line=dict(color="#070A0F", width=1.5),
-            label=[f"Total Billing ({m['total']})", "Exact Tier", "Tolerance Tier", "Exception Queue", f"Auto-Cleared (${m['cost']*20:,.0f})", f"Financial Exposure (${m['exposure']:,.0f})"],
-            color=["#38BDF8", "#00FF88", "#00F0FF", "#FF3366", "#00FF88", "#FF3366"]
-        ),
-        link=dict(
-            source=[0, 0, 1, 2, 2, 3],
-            target=[1, 2, 4, 4, 3, 5],
-            value=[max(1, m['matched']-1), max(1, m['probable']+1), max(1, m['matched']-1), max(1, m['probable']), 1, max(1, m['unmatched'])],
-            color=["rgba(0,255,136,0.3)", "rgba(0,240,255,0.3)", "rgba(0,255,136,0.4)", "rgba(0,240,255,0.4)", "rgba(255,51,102,0.3)", "rgba(255,51,102,0.4)"]
-        )
-    ))
-    fig_sankey.update_layout(paper_bgcolor="#0C121F", plot_bgcolor="#0C121F", font=dict(family="JetBrains Mono", color="#94A3B8"), height=340, margin=dict(t=30, b=20, l=20, r=20))
-    st.plotly_chart(fig_sankey, use_container_width=True)
-
-    c_p1, c_p2 = st.columns(2)
-    with c_p1:
-        fig_pie = go.Figure(go.Pie(
-            labels=["Matched", "Probable", "Unmatched"],
-            values=[m["matched"], m["probable"], m["unmatched"]],
-            hole=0.65,
-            marker=dict(colors=["#00FF88", "#00F0FF", "#FF3366"], line=dict(color="#070A0F", width=2))
+    if PLOTLY_AVAILABLE:
+        fig_sankey = go.Figure(go.Sankey(
+            node=dict(
+                pad=16, thickness=16, line=dict(color="#070A0F", width=1.5),
+                label=[f"Total Billing ({m['total']})", "Exact Tier", "Tolerance Tier", "Exception Queue", f"Auto-Cleared (${m['cost']*20:,.0f})", f"Financial Exposure (${m['exposure']:,.0f})"],
+                color=["#38BDF8", "#00FF88", "#00F0FF", "#FF3366", "#00FF88", "#FF3366"]
+            ),
+            link=dict(
+                source=[0, 0, 1, 2, 2, 3],
+                target=[1, 2, 4, 4, 3, 5],
+                value=[max(1, m['matched']-1), max(1, m['probable']+1), max(1, m['matched']-1), max(1, m['probable']), 1, max(1, m['unmatched'])],
+                color=["rgba(0,255,136,0.3)", "rgba(0,240,255,0.3)", "rgba(0,255,136,0.4)", "rgba(0,240,255,0.4)", "rgba(255,51,102,0.3)", "rgba(255,51,102,0.4)"]
+            )
         ))
-        fig_pie.update_layout(title="<b>Portfolio Status Breakdown</b>", paper_bgcolor="#0C121F", font=dict(family="Space Grotesk", color="#FFFFFF"), height=300, margin=dict(t=40, b=20, l=20, r=20))
-        st.plotly_chart(fig_pie, use_container_width=True)
+        fig_sankey.update_layout(paper_bgcolor="#0C121F", plot_bgcolor="#0C121F", font=dict(family="JetBrains Mono", color="#94A3B8"), height=340, margin=dict(t=30, b=20, l=20, r=20))
+        st.plotly_chart(fig_sankey, use_container_width=True)
 
-    with c_p2:
-        conn = get_db()
-        df_exc = pd.read_sql_query("SELECT exception_reason, financial_exposure FROM reconciliation_results WHERE status != 'MATCHED'", conn)
-        conn.close()
-        if not df_exc.empty:
-            df_exc["short"] = df_exc["exception_reason"].apply(lambda x: x[:30] + "...")
-            fig_bar = px.bar(df_exc, x="financial_exposure", y="short", orientation='h', color_discrete_sequence=["#FF3366"], title="<b>Exposure by Root Cause ($)</b>")
-            fig_bar.update_layout(paper_bgcolor="#0C121F", plot_bgcolor="#0C121F", font=dict(family="JetBrains Mono", color="#94A3B8"), height=300, margin=dict(t=40, b=20, l=20, r=20))
-            st.plotly_chart(fig_bar, use_container_width=True)
+        c_p1, c_p2 = st.columns(2)
+        with c_p1:
+            fig_pie = go.Figure(go.Pie(
+                labels=["Matched", "Probable", "Unmatched"],
+                values=[m["matched"], m["probable"], m["unmatched"]],
+                hole=0.65,
+                marker=dict(colors=["#00FF88", "#00F0FF", "#FF3366"], line=dict(color="#070A0F", width=2))
+            ))
+            fig_pie.update_layout(title="<b>Portfolio Status Breakdown</b>", paper_bgcolor="#0C121F", font=dict(family="Space Grotesk", color="#FFFFFF"), height=300, margin=dict(t=40, b=20, l=20, r=20))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with c_p2:
+            conn = get_db()
+            df_exc = pd.read_sql_query("SELECT exception_reason, financial_exposure FROM reconciliation_results WHERE status != 'MATCHED'", conn)
+            conn.close()
+            if not df_exc.empty:
+                df_exc["short"] = df_exc["exception_reason"].apply(lambda x: x[:30] + "...")
+                fig_bar = px.bar(df_exc, x="financial_exposure", y="short", orientation='h', color_discrete_sequence=["#FF3366"], title="<b>Exposure by Root Cause ($)</b>")
+                fig_bar.update_layout(paper_bgcolor="#0C121F", plot_bgcolor="#0C121F", font=dict(family="JetBrains Mono", color="#94A3B8"), height=300, margin=dict(t=40, b=20, l=20, r=20))
+                st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.markdown(f"""
+        <div style="background: #0C121F; border: 1px solid rgba(0, 255, 136, 0.25); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 12px 18px; text-align: center; flex: 1; min-width: 130px;">
+                    <div style="color: #38BDF8; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Ingested Feed</div>
+                    <div style="color: #FFFFFF; font-size: 1.4rem; font-weight: 700; font-family: 'JetBrains Mono'; margin-top: 4px;">{m['total']} Invoices</div>
+                    <div style="color: #94A3B8; font-size: 0.72rem;">100% Ingested</div>
+                </div>
+                <div style="color: #00FF88; font-size: 1.4rem; font-weight: bold;">➔</div>
+                <div style="background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); border-radius: 8px; padding: 12px 18px; text-align: center; flex: 1; min-width: 130px;">
+                    <div style="color: #00FF88; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Exact Tier</div>
+                    <div style="color: #00FF88; font-size: 1.4rem; font-weight: 700; font-family: 'JetBrains Mono'; margin-top: 4px;">{m['matched']} Cleared</div>
+                    <div style="color: #94A3B8; font-size: 0.72rem;">100% Match</div>
+                </div>
+                <div style="color: #00F0FF; font-size: 1.4rem; font-weight: bold;">➔</div>
+                <div style="background: rgba(0, 240, 255, 0.1); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 8px; padding: 12px 18px; text-align: center; flex: 1; min-width: 130px;">
+                    <div style="color: #00F0FF; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Tolerance Tier</div>
+                    <div style="color: #00F0FF; font-size: 1.4rem; font-weight: 700; font-family: 'JetBrains Mono'; margin-top: 4px;">{m['probable']} Probable</div>
+                    <div style="color: #94A3B8; font-size: 0.72rem;">Within Threshold</div>
+                </div>
+                <div style="color: #FF3366; font-size: 1.4rem; font-weight: bold;">➔</div>
+                <div style="background: rgba(255, 51, 102, 0.1); border: 1px solid rgba(255, 51, 102, 0.3); border-radius: 8px; padding: 12px 18px; text-align: center; flex: 1; min-width: 130px;">
+                    <div style="color: #FF3366; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Exception Queue</div>
+                    <div style="color: #FF3366; font-size: 1.4rem; font-weight: 700; font-family: 'JetBrains Mono'; margin-top: 4px;">{m['unmatched']} Blocked</div>
+                    <div style="color: #FF6B8B; font-size: 0.72rem;">${m['exposure']:,.0f} Exposure</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        c_p1, c_p2 = st.columns(2)
+        with c_p1:
+            st.markdown("#### 📊 Portfolio Status Breakdown")
+            df_status = pd.DataFrame({
+                "Count": [m["matched"], m["probable"], m["unmatched"]]
+            }, index=["Matched", "Probable", "Unmatched"])
+            st.bar_chart(df_status)
+
+        with c_p2:
+            st.markdown("#### ⚠️ Exposure by Root Cause ($)")
+            conn = get_db()
+            df_exc = pd.read_sql_query("SELECT exception_reason, financial_exposure FROM reconciliation_results WHERE status != 'MATCHED'", conn)
+            conn.close()
+            if not df_exc.empty:
+                df_exc["Cause"] = df_exc["exception_reason"].apply(lambda x: x[:25] + "...")
+                st.bar_chart(df_exc.set_index("Cause")["financial_exposure"])
+            else:
+                st.info("No active exceptions detected.")
+
+        st.caption("💡 *Note: Add `plotly` to your requirements.txt in GitHub if you'd like interactive vector Sankey & Donut diagrams.*")
 
 # ==============================================================================
 # VIEW 2: 'WHAT-IF' SIMULATION SANDBOX
