@@ -455,6 +455,74 @@ def update_review_decision(
     conn.close()
     return True
 
+def batch_update_review_decisions(
+    invoice_ids: List[str],
+    decision: ReviewDecision,
+    reviewer_name: str,
+    comment: str
+) -> int:
+    """Updates review decisions for multiple invoices and logs immutable audit entries."""
+    if not invoice_ids:
+        return 0
+    init_db()
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    updated_count = 0
+    now_ts = datetime.utcnow().isoformat()
+    
+    for inv_id in invoice_ids:
+        cursor.execute("SELECT status, contract_id FROM reconciliation_results WHERE invoice_id = ?", (inv_id,))
+        row = cursor.fetchone()
+        if not row:
+            continue
+            
+        prev_status = row["status"]
+        contract_id = row["contract_id"]
+        
+        new_status = prev_status
+        if decision == ReviewDecision.ACCEPT:
+            new_status = ReconciliationStatus.MATCHED.value
+        elif decision == ReviewDecision.REJECT:
+            new_status = ReconciliationStatus.UNMATCHED.value
+            
+        cursor.execute("""
+        UPDATE reconciliation_results
+        SET review_status = ?,
+            reviewer_name = ?,
+            reviewer_comment = ?,
+            status = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE invoice_id = ?
+        """, (
+            decision.value,
+            reviewer_name,
+            comment,
+            new_status,
+            inv_id
+        ))
+        
+        cursor.execute("""
+        INSERT INTO audit_logs (
+            timestamp, invoice_id, contract_id, action_type, actor, previous_status, new_status, details, evidence_citation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            now_ts,
+            inv_id,
+            contract_id,
+            f"BATCH_{decision.value}",
+            reviewer_name,
+            prev_status,
+            new_status,
+            f"Batch clearance by '{reviewer_name}': {comment}",
+            "Batch Triage Action"
+        ))
+        updated_count += 1
+        
+    conn.commit()
+    conn.close()
+    return updated_count
+
 def log_audit_entry(entry: AuditLogEntry):
     init_db()
     conn = get_connection()
