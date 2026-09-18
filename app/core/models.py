@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
@@ -122,11 +122,11 @@ class ReconciliationResult(BaseModel):
     reviewer_name: Optional[str] = None
     reviewer_comment: Optional[str] = None
     override_amount: Optional[float] = None
-    reconciliation_timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    reconciliation_timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class AuditLogEntry(BaseModel):
     id: Optional[int] = None
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     invoice_id: str
     contract_id: Optional[str] = None
     action_type: str  # RECONCILE, ACCEPT, REJECT, OVERRIDE, RE-INGEST

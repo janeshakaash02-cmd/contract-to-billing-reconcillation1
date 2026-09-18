@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Tuple
 
 from app.core.models import (
@@ -36,7 +36,8 @@ class ReconciliationEngine:
     def reconcile_invoice(
         self,
         raw_invoice: RawInvoice,
-        existing_invoices: Optional[List[RawInvoice]] = None
+        existing_invoices: Optional[List[RawInvoice]] = None,
+        target_contract: Optional[ContractTerms] = None
     ) -> ReconciliationResult:
         """
         Reconciles a single invoice against contractual terms and corporate policy.
@@ -71,7 +72,11 @@ class ReconciliationEngine:
             )
 
         # 2. Run Matching Engine (Deterministic + Fuzzy)
-        match_data = self.matching_engine.match(raw_invoice, existing_invoices=existing_invoices)
+        match_data = self.matching_engine.match(
+            raw_invoice,
+            existing_invoices=existing_invoices,
+            target_contract=target_contract
+        )
         contract: Optional[ContractTerms] = match_data["contract"]
         exact_res = match_data["exact"]
         tolerance_res = match_data["tolerance"]
@@ -206,7 +211,7 @@ class ReconciliationEngine:
             recommendation=explanation_data["recommendation"],
             matching_methods_used=methods_used,
             review_status=ReviewDecision.PENDING if status != ReconciliationStatus.MATCHED else ReviewDecision.ACCEPT,
-            reconciliation_timestamp=datetime.utcnow().isoformat(),
+            reconciliation_timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
     def reconcile_batch(
@@ -229,7 +234,7 @@ class ReconciliationEngine:
                 # Log audit entry
                 citation = res.evidence_citations[0] if res.evidence_citations else "System Calculation"
                 log_audit_entry(AuditLogEntry(
-                    timestamp=datetime.utcnow().isoformat(),
+                    timestamp=datetime.now(timezone.utc).isoformat(),
                     invoice_id=res.invoice_id,
                     contract_id=res.contract_id,
                     action_type="RECONCILE",

@@ -51,7 +51,8 @@ class MatchingEngine:
     def match(
         self,
         raw_invoice: RawInvoice,
-        existing_invoices: Optional[List[RawInvoice]] = None
+        existing_invoices: Optional[List[RawInvoice]] = None,
+        target_contract: Optional[ContractTerms] = None
     ) -> Dict[str, Any]:
         """
         Executes all matching strategies for a single invoice.
@@ -75,7 +76,11 @@ class MatchingEngine:
                     break
 
         # 2. Resolve Contract
-        contract, resolution_method = self.resolve_contract(norm_inv)
+        if target_contract is not None:
+            contract = target_contract
+            resolution_method = f"EXPLICIT_SELECTION ({target_contract.contract_id})"
+        else:
+            contract, resolution_method = self.resolve_contract(norm_inv)
         
         # 3. Exact Matching
         exact_res = evaluate_exact_match(norm_inv, contract)

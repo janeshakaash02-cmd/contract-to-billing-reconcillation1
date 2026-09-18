@@ -44,40 +44,58 @@ def get_custom_css() -> str:
         section[data-testid="stSidebar"] {
             background-color: #05070B !important;
             border-right: 1px solid rgba(0, 255, 136, 0.18) !important;
-            min-width: 290px !important;
+            min-width: 320px !important;
         }
         section[data-testid="stSidebar"] hr {
             border-color: rgba(0, 255, 136, 0.15) !important;
         }
         
-        /* Ensure Sidebar Radio Items Are Single-Line, Sleek & Modern */
+        /* Ensure Sidebar Radio Items Are Strictly Single-Line, Sleek & Modern */
         div[data-testid="stSidebar"] div[role="radiogroup"] {
-            gap: 2px !important;
+            gap: 3px !important;
         }
         div[data-testid="stSidebar"] div[role="radiogroup"] label {
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
+            word-break: keep-all !important;
             padding: 8px 12px !important;
             border-radius: 8px !important;
             transition: all 0.2s ease !important;
             border: 1px solid transparent !important;
             background: rgba(13, 19, 31, 0.4) !important;
-            margin-bottom: 4px !important;
+            margin-bottom: 2px !important;
             cursor: pointer !important;
+            display: flex !important;
+            align-items: center !important;
         }
         div[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
             background: rgba(0, 255, 136, 0.08) !important;
             border-color: rgba(0, 255, 136, 0.3) !important;
             transform: translateX(3px) !important;
         }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label * {
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            word-break: keep-all !important;
+        }
+        div[data-testid="stSidebar"] div[role="radiogroup"] label div[data-testid="stMarkdownContainer"] {
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
         div[data-testid="stSidebar"] div[role="radiogroup"] label p {
             white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            word-break: keep-all !important;
             font-family: 'Space Grotesk', sans-serif !important;
             font-size: 0.88rem !important;
             font-weight: 500 !important;
             letter-spacing: 0.01em !important;
             line-height: 1.2 !important;
+            margin: 0 !important;
         }
         div[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
             background: rgba(0, 255, 136, 0.12) !important;

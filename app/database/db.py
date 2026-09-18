@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
@@ -261,6 +261,58 @@ def get_all_invoices() -> List[RawInvoice]:
         for r in rows
     ]
 
+def get_invoice(invoice_id: str) -> Optional[RawInvoice]:
+    init_db()
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM invoices WHERE invoice_id = ?", (invoice_id,))
+    r = cursor.fetchone()
+    conn.close()
+    if not r:
+        return None
+    return RawInvoice(
+        invoice_id=r["invoice_id"],
+        contract_id=r["contract_id"],
+        customer_id=r["customer_id"],
+        customer_name=r["customer_name"],
+        invoice_date=r["invoice_date"],
+        billing_period=r["billing_period"],
+        currency=r["currency"],
+        quantity=r["quantity"],
+        unit_price=r["unit_price"],
+        discount=r["discount"],
+        tax=r["tax"],
+        total_amount=r["total_amount"],
+        reference_number=r["reference_number"],
+    )
+
+def get_invoices_by_contract(contract_id: str) -> List[RawInvoice]:
+    init_db()
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM invoices WHERE contract_id = ? ORDER BY invoice_id ASC", (contract_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        RawInvoice(
+            invoice_id=r["invoice_id"],
+            contract_id=r["contract_id"],
+            customer_id=r["customer_id"],
+            customer_name=r["customer_name"],
+            invoice_date=r["invoice_date"],
+            billing_period=r["billing_period"],
+            currency=r["currency"],
+            quantity=r["quantity"],
+            unit_price=r["unit_price"],
+            discount=r["discount"],
+            tax=r["tax"],
+            total_amount=r["total_amount"],
+            reference_number=r["reference_number"],
+        )
+        for r in rows
+    ]
+
+
 def save_reconciliation_results(results: List[ReconciliationResult]):
     init_db()
     conn = get_connection()
@@ -440,7 +492,7 @@ def update_review_decision(
         timestamp, invoice_id, contract_id, action_type, actor, previous_status, new_status, details, evidence_citation
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
         invoice_id,
         contract_id,
         action_type,
@@ -469,7 +521,7 @@ def batch_update_review_decisions(
     cursor = conn.cursor()
     
     updated_count = 0
-    now_ts = datetime.utcnow().isoformat()
+    now_ts = datetime.now(timezone.utc).isoformat()
     
     for inv_id in invoice_ids:
         cursor.execute("SELECT status, contract_id FROM reconciliation_results WHERE invoice_id = ?", (inv_id,))

@@ -159,3 +159,26 @@ def test_explainable_confidence_breakdown():
     assert breakdown.id_match_score == 1.0
     assert breakdown.amount_match_score == 1.0
     assert len(breakdown.factors) >= 4
+
+def test_reconciliation_explicit_target_contract(sample_contracts):
+    target = sample_contracts[0]
+    engine = ReconciliationEngine(sample_contracts)
+    subtotal = target.quantity * target.unit_price
+    discount_amt = subtotal * (target.discount_percent / 100.0)
+    raw = RawInvoice(
+        invoice_id="INV-TARGET-01",
+        contract_id=None,  # No contract ID in raw invoice
+        customer_id=None,  # No customer ID
+        customer_name=target.customer_name,
+        invoice_date="2025-03-15",
+        currency=target.currency,
+        quantity=target.quantity,
+        unit_price=target.unit_price,
+        discount=discount_amt,
+        total_amount=subtotal - discount_amt,
+    )
+    res = engine.reconcile_invoice(raw, target_contract=target)
+    assert res.status == ReconciliationStatus.MATCHED
+    assert res.contract_id == target.contract_id
+    assert any("EXPLICIT_SELECTION" in m for m in res.matching_methods_used)
+

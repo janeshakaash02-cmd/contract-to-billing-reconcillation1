@@ -1,8 +1,30 @@
 import os
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from app.config import LLM_PROVIDER, LLM_API_KEY, LLM_MODEL
 from app.core.models import ContractClause
 from app.rag.vector_store import get_vector_store
+
+def clean_contract_text(text: str) -> str:
+    """
+    Strips raw PDF headers, footers, page numbers, signature blocks, and continuation tags.
+    """
+    if not text:
+        return ""
+    # Strip signature lines and party titles
+    text = re.sub(r"FOR SERVICE PROVIDER:.*?(?=\n\n|\Z)", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"FOR CLIENT:.*?(?=\n\n|\Z)", "", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"Signature:\s*_.*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"Name:\s*(Jane Doe|Authorized Signatory).*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"Title:\s*(VP Commercial Operations|Chief Procurement Officer).*", "", text, flags=re.IGNORECASE)
+    # Strip header/footer page markers
+    text = re.sub(r"MASTER SERVICES AGREEMENT\s*\(CONTINUED\)", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"Agreement Reference:\s*[A-Z0-9-]+\s*\|\s*Page\s*\d+", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"Page\s*\d+\s*(of\s*\d+)?", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b\d+\.\d+\s*(Effective Date|Expiration Date|Invoicing Window|Audit Rights|Permissible Variance|Dispute Threshold|Special Stipulation):?", "", text, flags=re.IGNORECASE)
+    # Normalize whitespace
+    cleaned = " ".join(text.split()).strip()
+    return cleaned
 
 SYSTEM_PROMPT = """You are a senior Finance AI Auditor. Your job is to analyze billing invoices against contractual legal agreements.
 
@@ -139,7 +161,8 @@ class ContractRAGChain:
             if ev_list and ev_list[0][1] >= 0.20:
                 top_clause = ev_list[0][0]
                 citations.append(f"{top_clause.document_name}, Page {top_clause.page_number} ({top_clause.clause_category})")
-                contract_clause_snippet = f"\"{top_clause.clause_text.strip()}\""
+                cleaned_text = clean_contract_text(top_clause.clause_text)
+                contract_clause_snippet = f"\"{cleaned_text}\""
             else:
                 citations.append(f"Contract ID: {contract_id} (Metadata Record)")
 

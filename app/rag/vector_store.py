@@ -44,14 +44,24 @@ class VectorStoreManager:
                         model_name=EMBEDDING_MODEL
                     )
                 else:
-                    self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+                    try:
+                        self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+                    except Exception as _embed_err:
+                        print(f"[WARN] DefaultEmbeddingFunction failed ({_embed_err}), disabling ChromaDB embedding function.")
+                        self.embedding_fn = None
 
                 self.client = chromadb.PersistentClient(path=self.persist_dir)
-                self.collection = self.client.get_or_create_collection(
-                    name=COLLECTION_NAME,
-                    embedding_function=self.embedding_fn,
-                    metadata={"hnsw:space": "cosine"}
-                )
+                if self.embedding_fn is not None:
+                    self.collection = self.client.get_or_create_collection(
+                        name=COLLECTION_NAME,
+                        embedding_function=self.embedding_fn,
+                        metadata={"hnsw:space": "cosine"}
+                    )
+                else:
+                    self.collection = self.client.get_or_create_collection(
+                        name=COLLECTION_NAME,
+                        metadata={"hnsw:space": "cosine"}
+                    )
             except Exception as e:
                 print(f"[WARN] ChromaDB initialization failed, falling back to memory: {e}")
                 self.collection = None

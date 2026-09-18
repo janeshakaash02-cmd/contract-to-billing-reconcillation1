@@ -511,22 +511,32 @@ This policy sets mandatory reconciliation criteria for accounts payable and cust
 
 def generate_synthetic_invoices(contracts: List[ContractTerms]) -> List[RawInvoice]:
     """
-    Generates 150+ realistic synthetic invoices covering all 15 enterprise reconciliation edge cases.
+    Generates 160+ realistic synthetic invoices with dynamic monthly quantities,
+    varying unit prices, and a balanced mix of MATCHED, PROBABLE_MATCH, and UNMATCHED/DISCREPANCY cases.
     """
     invoices: List[RawInvoice] = []
     inv_num = 1000
     
-    # Helper to calculate amounts
-    def make_inv(c: ContractTerms, month: int, variant: str = "EXACT", **kwargs) -> RawInvoice:
+    # Helper to calculate dynamic monthly invoice amounts
+    def make_inv(c: ContractTerms, month: int, variant: str = "EXACT", override_qty: Optional[int] = None) -> RawInvoice:
         nonlocal inv_num
         inv_num += 1
         inv_id = f"INV-{inv_num}"
         inv_date = f"2025-{month:02d}-15"
         billing_period = f"2025-{month:02d}"
         
-        base_qty = c.quantity
+        # Calculate dynamic monthly quantity for multi-unit contracts or usage fluctuation
+        if override_qty is not None:
+            calc_qty = override_qty
+        elif c.quantity > 1:
+            # Deterministic dynamic monthly variation (e.g. seat fluctuations)
+            variation_step = ((month * 11 + int(c.contract_id[-2:])) % 13) - 6
+            calc_qty = max(1, c.quantity + variation_step)
+        else:
+            calc_qty = c.quantity
+            
         unit_price = c.unit_price
-        gross = base_qty * unit_price
+        gross = round(calc_qty * unit_price, 2)
         discount_amount = round(gross * (c.discount_percent / 100.0), 2)
         net_amount = round(gross - discount_amount, 2)
         
@@ -534,154 +544,211 @@ def generate_synthetic_invoices(contracts: List[ContractTerms]) -> List[RawInvoi
         curr = c.currency
         contract_id = c.contract_id
         cust_id = c.customer_id
-        ref = f"PO-{c.contract_id[-4:]}-M{month}"
+        ref = f"PO-{c.contract_id[-4:]}-M{month:02d}"
         
         if variant == "EXACT":
-            # Clean exact match
+            # Clean exact match with dynamic monthly numbers
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
                 unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=net_amount, reference_number=ref
             )
             
         elif variant == "TOLERANCE_WITHIN":
-            # 0.4% variance ($36 on $9,000)
-            slight_delta = round(net_amount * 0.004, 2)
+            # Small rounding/tax variance (0.4%) within contract tolerance
+            slight_delta = round(max(5.0, net_amount * 0.004), 2)
             actual_total = round(net_amount + slight_delta, 2)
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
                 unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=actual_total, reference_number=ref
             )
             
         elif variant == "VARIANCE_EXCEEDS":
-            # 12% overcharge
+            # 12% overcharge exceeding tolerance threshold
             overcharge = round(net_amount * 0.12, 2)
             actual_total = round(net_amount + overcharge, 2)
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
                 unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=actual_total, reference_number=ref
             )
             
         elif variant == "MISSING_CONTRACT":
-            # No contract ID on invoice
+            # Omitted contract ID on invoice (requires fuzzy/customer matching)
             return RawInvoice(
                 invoice_id=inv_id, contract_id="", customer_id=cust_id, customer_name=cust_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
                 unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=net_amount, reference_number=ref
             )
             
         elif variant == "WRONG_DISCOUNT":
-            # Contract has discount (e.g. 10%), but invoice charged full gross
+            # Omitted contractual discount (charged full gross price)
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
                 unit_price=unit_price, discount=0.0, tax=0.0, total_amount=gross, reference_number=ref
             )
             
         elif variant == "WRONG_QUANTITY":
-            # Billed 130 units instead of 100
-            new_qty = base_qty + 30
-            new_gross = new_qty * unit_price
+            # Unauthorized overbilling of extra units
+            extra_qty = calc_qty + (25 if c.quantity > 10 else 3)
+            new_gross = round(extra_qty * unit_price, 2)
             new_net = round(new_gross * (1.0 - c.discount_percent / 100.0), 2)
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=new_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=extra_qty,
                 unit_price=unit_price, discount=round(new_gross * (c.discount_percent / 100.0), 2), tax=0.0,
                 total_amount=new_net, reference_number=ref
             )
             
         elif variant == "CURRENCY_MISMATCH":
-            # USD contract billed in EUR
-            wrong_curr = "EUR" if curr == "USD" else "USD"
+            # Billed in unauthorized currency (USD vs EUR/GBP/INR)
+            wrong_curr = "EUR" if curr == "USD" else ("USD" if curr in ["EUR", "GBP"] else "USD")
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=wrong_curr, quantity=base_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=wrong_curr, quantity=calc_qty,
                 unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=net_amount, reference_number=ref
             )
             
         elif variant == "CUSTOMER_NAME_VARIATION":
-            # Variation in company suffix
-            var_name = cust_name.replace("Inc.", "Incorporated").replace("Corp", "Corporation").replace("LLC", "")
+            # Legal entity name alias/variation
+            var_name = cust_name.replace("Inc.", "Incorporated").replace("Corp", "Corporation").replace("LLC", "").replace("Ltd", "Limited").strip()
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=var_name,
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
                 unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=net_amount, reference_number=ref
             )
             
         elif variant == "CONTRACT_EXPIRED":
-            # Invoice dated after contract expiry
+            # Invoice submitted after contract termination date
             exp_date = "2025-10-15" if c.contract_id in ["CTR-1003", "CTR-1008"] else "2026-04-15"
+            exp_period = "2025-10" if c.contract_id in ["CTR-1003", "CTR-1008"] else "2026-04"
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date=exp_date, billing_period="2025-10" if c.contract_id in ["CTR-1003", "CTR-1008"] else "2026-04",
-                currency=curr, quantity=base_qty, unit_price=unit_price, discount=discount_amount, tax=0.0,
-                total_amount=net_amount, reference_number=ref
+                invoice_date=exp_date, billing_period=exp_period, currency=curr, quantity=calc_qty,
+                unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=net_amount, reference_number=ref
             )
             
         elif variant == "OUTSIDE_PERIOD":
-            # Invoice dated before effective date
+            # Invoice dated prior to effective start date
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-                invoice_date="2024-11-15", billing_period="2024-11", currency=curr, quantity=base_qty,
+                invoice_date="2024-11-15", billing_period="2024-11", currency=curr, quantity=calc_qty,
                 unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=net_amount, reference_number=ref
             )
             
         elif variant == "DATA_QUALITY":
-            # Missing customer name or negative amount
+            # Empty customer name or invalid negative billing total
             return RawInvoice(
                 invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name="",
-                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
-                unit_price=unit_price, discount=0.0, tax=0.0, total_amount=-500.0, reference_number=ref
+                invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
+                unit_price=unit_price, discount=0.0, tax=0.0, total_amount=-750.0, reference_number=ref
             )
             
         return RawInvoice(
             invoice_id=inv_id, contract_id=contract_id, customer_id=cust_id, customer_name=cust_name,
-            invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=base_qty,
+            invoice_date=inv_date, billing_period=billing_period, currency=curr, quantity=calc_qty,
             unit_price=unit_price, discount=discount_amount, tax=0.0, total_amount=net_amount, reference_number=ref
         )
 
-    # 1. Baseline Exact Matches (8 to 9 months for each of the 15 contracts -> ~110 invoices)
+    # 1. Generate dynamic baseline invoices (Months 1 to 7) for all 15 contracts (~105 invoices)
     for c in contracts:
         for m in range(1, 8):
             invoices.append(make_inv(c, month=m, variant="EXACT"))
             
-    # 2. Add realistic discrepancy scenarios across contracts (~40 invoices)
-    c1 = contracts[0]  # CTR-1001 (has 10% discount)
-    invoices.append(make_inv(c1, month=8, variant="WRONG_DISCOUNT"))  # Billed gross $10,000 instead of $9,000
-    invoices.append(make_inv(c1, month=9, variant="TOLERANCE_WITHIN")) # Small $36 variance
-    invoices.append(make_inv(c1, month=10, variant="VARIANCE_EXCEEDS")) # 12% overcharge
+    # 2. Add realistic discrepancy and exception variants across ALL contracts (~60 invoices)
+    # CTR-1001 (Nexus Cloud - 10% discount)
+    c1 = contracts[0]
+    invoices.append(make_inv(c1, month=8, variant="WRONG_DISCOUNT"))
+    invoices.append(make_inv(c1, month=9, variant="TOLERANCE_WITHIN"))
+    invoices.append(make_inv(c1, month=10, variant="VARIANCE_EXCEEDS"))
 
-    c2 = contracts[1]  # CTR-1002 (Meridian Logistics)
+    # CTR-1002 (Meridian Logistics)
+    c2 = contracts[1]
     invoices.append(make_inv(c2, month=8, variant="CUSTOMER_NAME_VARIATION"))
-    invoices.append(make_inv(c2, month=9, variant="WRONG_QUANTITY")) # 80 vehicles instead of 50
-    # Duplicate invoice test case
+    invoices.append(make_inv(c2, month=9, variant="WRONG_QUANTITY"))
     dup_base = make_inv(c2, month=10, variant="EXACT")
     invoices.append(dup_base)
     dup_copy = RawInvoice(**dup_base.model_dump())
-    dup_copy.invoice_id = f"INV-{inv_num + 1}"
+    inv_num += 1
+    dup_copy.invoice_id = f"INV-{inv_num}"
     invoices.append(dup_copy)
 
-    c3 = contracts[2]  # CTR-1003 (Apex Health - expires June 30, 2025)
-    invoices.append(make_inv(c3, month=8, variant="CONTRACT_EXPIRED")) # Dated October 2025
+    # CTR-1003 (Apex Health - 5% discount, expires June 30, 2025)
+    c3 = contracts[2]
+    invoices.append(make_inv(c3, month=8, variant="CONTRACT_EXPIRED"))
+    invoices.append(make_inv(c3, month=9, variant="WRONG_DISCOUNT"))
+    invoices.append(make_inv(c3, month=10, variant="VARIANCE_EXCEEDS"))
+    invoices.append(make_inv(c3, month=11, variant="TOLERANCE_WITHIN"))
+    invoices.append(make_inv(c3, month=12, variant="CUSTOMER_NAME_VARIATION"))
 
-    c4 = contracts[3]  # CTR-1004 (EUR contract)
-    invoices.append(make_inv(c4, month=8, variant="CURRENCY_MISMATCH")) # Billed in USD instead of EUR
+    # CTR-1004 (Vortex Media - EUR contract)
+    c4 = contracts[3]
+    invoices.append(make_inv(c4, month=8, variant="CURRENCY_MISMATCH"))
+    invoices.append(make_inv(c4, month=9, variant="TOLERANCE_WITHIN"))
 
-    c5 = contracts[4]  # CTR-1005 (Horizon Financial)
+    # CTR-1005 (Horizon Financial - 15% discount)
+    c5 = contracts[4]
     invoices.append(make_inv(c5, month=8, variant="WRONG_DISCOUNT"))
     invoices.append(make_inv(c5, month=9, variant="MISSING_CONTRACT"))
+    invoices.append(make_inv(c5, month=10, variant="WRONG_QUANTITY"))
 
-    c8 = contracts[7]  # CTR-1008 (Starlight Cyber - expires May 31, 2025)
+    # CTR-1006 (Zenith Retail Systems)
+    c6 = contracts[5]
+    invoices.append(make_inv(c6, month=8, variant="DATA_QUALITY"))
+    invoices.append(make_inv(c6, month=9, variant="VARIANCE_EXCEEDS"))
+
+    # CTR-1007 (Bharat Data Analytics - INR contract)
+    c7 = contracts[6]
+    invoices.append(make_inv(c7, month=8, variant="WRONG_DISCOUNT"))
+    invoices.append(make_inv(c7, month=9, variant="CURRENCY_MISMATCH"))
+
+    # CTR-1008 (Starlight Cyber - expires May 31, 2025)
+    c8 = contracts[7]
     invoices.append(make_inv(c8, month=8, variant="CONTRACT_EXPIRED"))
+    invoices.append(make_inv(c8, month=9, variant="TOLERANCE_WITHIN"))
 
-    c9 = contracts[8]  # CTR-1009 (Beacon Renewable)
+    # CTR-1009 (Beacon Renewable - 8% discount)
+    c9 = contracts[8]
     invoices.append(make_inv(c9, month=8, variant="TOLERANCE_WITHIN"))
     invoices.append(make_inv(c9, month=9, variant="OUTSIDE_PERIOD"))
+    invoices.append(make_inv(c9, month=10, variant="WRONG_DISCOUNT"))
 
-    c10 = contracts[9] # CTR-1010 (Titan Heavy - high value)
+    # CTR-1010 (Titan Heavy - high value $32k)
+    c10 = contracts[9]
     invoices.append(make_inv(c10, month=8, variant="VARIANCE_EXCEEDS"))
+    invoices.append(make_inv(c10, month=9, variant="TOLERANCE_WITHIN"))
+
+    # CTR-1011 (Kensington Financial - GBP contract)
+    c11 = contracts[10]
+    invoices.append(make_inv(c11, month=8, variant="CURRENCY_MISMATCH"))
+    invoices.append(make_inv(c11, month=9, variant="WRONG_DISCOUNT"))
+
+    # CTR-1012 (OmniHealth Diagnostics)
+    c12 = contracts[11]
+    invoices.append(make_inv(c12, month=8, variant="WRONG_QUANTITY"))
+    invoices.append(make_inv(c12, month=9, variant="CUSTOMER_NAME_VARIATION"))
+
+    # CTR-1013 (Pioneer Autonomous - 12% discount)
+    c13 = contracts[12]
+    invoices.append(make_inv(c13, month=8, variant="WRONG_DISCOUNT"))
+    invoices.append(make_inv(c13, month=9, variant="VARIANCE_EXCEEDS"))
+
+    # CTR-1014 (Silverline Telecom)
+    c14 = contracts[13]
+    invoices.append(make_inv(c14, month=8, variant="TOLERANCE_WITHIN"))
+    dup_tel = make_inv(c14, month=9, variant="EXACT")
+    invoices.append(dup_tel)
+    dup_tel_copy = RawInvoice(**dup_tel.model_dump())
+    inv_num += 1
+    dup_tel_copy.invoice_id = f"INV-{inv_num}"
+    invoices.append(dup_tel_copy)
+
+    # CTR-1015 (Crestview Real Estate)
+    c15 = contracts[14]
+    invoices.append(make_inv(c15, month=8, variant="WRONG_DISCOUNT"))
+    invoices.append(make_inv(c15, month=9, variant="OUTSIDE_PERIOD"))
 
     # Unrecognized entity / missing contract
     inv_num += 1
@@ -700,9 +767,6 @@ def generate_synthetic_invoices(contracts: List[ContractTerms]) -> List[RawInvoi
         total_amount=5400.0,
         reference_number="PO-UNKNOWN-01"
     ))
-
-    # Data quality exception
-    invoices.append(make_inv(contracts[5], month=8, variant="DATA_QUALITY"))
 
     return invoices
 
